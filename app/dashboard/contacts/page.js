@@ -148,7 +148,32 @@ export default function Contacts() {
               <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Deal Value</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: C.gold }}>${(selected.value||0).toLocaleString()}</div>
             </div>
-            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+            <a
+              href={(() => {
+                const p = new URLSearchParams()
+                const parts = (selected.name || '').split(' ')
+                p.set('firstName', parts[0] || '')
+                p.set('lastName', parts.slice(1).join(' ') || '')
+                if (selected.email) p.set('email', selected.email)
+                if (selected.phone) p.set('phone', selected.phone.replace(/\D/g,''))
+                if (selected.address) {
+                  const addr = selected.address.split(',')
+                  p.set('address', addr[0]?.trim() || '')
+                  p.set('city', addr[1]?.trim() || '')
+                  const sp = (addr[2] || '').trim().split(' ')
+                  p.set('state', sp[0] || 'CA')
+                  p.set('zip', sp[1] || '')
+                }
+                p.set('crm_contact_id', selected.id)
+                return 'https://sos1-proposal-experience.onrender.com/?' + p.toString()
+              })()}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 14, marginBottom: 10, background: C.gold, color: '#fff', borderRadius: 8, padding: '11px 0', textDecoration: 'none', fontSize: 13, fontWeight: 700, fontFamily: F }}
+            >
+              ⚡ Add Proposal
+            </a>
+            <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => openEdit(selected)} style={{ flex: 1, background: C.navy, color: C.cream, border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Edit</button>
               <button onClick={() => handleDelete(selected.id)} style={{ flex: 1, background: C.white, color: '#C0392B', border: `1.5px solid #F5C6C6`, borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Delete</button>
             </div>
