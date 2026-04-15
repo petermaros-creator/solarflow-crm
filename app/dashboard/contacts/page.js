@@ -17,6 +17,22 @@ export default function Contacts() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState(EMPTY)
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [billFile, setBillFile] = useState(null)
+
+  async function uploadBill(file, contactId) {
+    setUploading(true)
+    const ext = file.name.split('.').pop()
+    const path = `${contactId || Date.now()}/bill.${ext}`
+    const { data, error } = await supabase.storage.from('utility-bills').upload(path, file, { upsert: true })
+    if (!error) {
+      const { data: urlData } = supabase.storage.from('utility-bills').getPublicUrl(path)
+      setUploading(false)
+      return urlData.publicUrl
+    }
+    setUploading(false)
+    return null
+  }
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -35,12 +51,18 @@ export default function Contacts() {
 
   async function handleSave() {
     setLoading(true)
-    
-    if (form.id) {
-      await supabase.from('contacts').update({ ...form, user_id: '00000000-0000-0000-0000-000000000001' }).eq('id', form.id)
-    } else {
-      await supabase.from('contacts').insert({ ...form, user_id: '00000000-0000-0000-0000-000000000001' })
+    let billUrl = form.utility_bill_url
+    if (billFile) {
+      const tempId = form.id || Date.now().toString()
+      billUrl = await uploadBill(billFile, tempId) || billUrl
     }
+    const payload = { ...form, utility_bill_url: billUrl, user_id: '00000000-0000-0000-0000-000000000001' }
+    if (form.id) {
+      await supabase.from('contacts').update(payload).eq('id', form.id)
+    } else {
+      await supabase.from('contacts').insert(payload)
+    }
+    setBillFile(null)
     setShowModal(false)
     setForm(EMPTY)
     await load()
@@ -148,6 +170,17 @@ export default function Contacts() {
               <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Deal Value</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: C.gold }}>${(selected.value||0).toLocaleString()}</div>
             </div>
+            {selected.utility_bill_url && (
+              <div style={{ marginTop: 16, padding: '12px 14px', background: C.goldPale, borderRadius: 8, border: '1px solid #EDD5A0' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: '#8C6200', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Utility Bill on File</div>
+                <div style={{ fontSize: 12, color: C.textMid, marginBottom: 4 }}>
+                  {selected.utility && <span>{selected.utility} · </span>}
+                  {selected.monthly_kwh && <span>{selected.monthly_kwh} kWh/mo · </span>}
+                  {selected.avg_bill && <span>${selected.avg_bill}/mo avg</span>}
+                </div>
+                <a href={selected.utility_bill_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>View Bill ↗</a>
+              </div>
+            )}
             <a
               href={(() => {
                 const p = new URLSearchParams()
@@ -155,7 +188,7 @@ export default function Contacts() {
                 p.set('firstName', parts[0] || '')
                 p.set('lastName', parts.slice(1).join(' ') || '')
                 if (selected.email) p.set('email', selected.email)
-                if (selected.phone) p.set('phone', selected.phone.replace(/\D/g,''))
+                if (selected.phone) p.set('phone', (selected.phone || '').replace(/\D/g,''))
                 if (selected.address) {
                   const addr = selected.address.split(',')
                   p.set('address', addr[0]?.trim() || '')
@@ -164,6 +197,11 @@ export default function Contacts() {
                   p.set('state', sp[0] || 'CA')
                   p.set('zip', sp[1] || '')
                 }
+                if (selected.utility) p.set('utility', selected.utility)
+                if (selected.monthly_kwh) p.set('monthlyKwh', selected.monthly_kwh)
+                if (selected.avg_bill) p.set('avgBill', selected.avg_bill)
+                if (selected.current_rate) p.set('currentRate', selected.current_rate)
+                if (selected.roof_type) p.set('roofType', selected.roof_type)
                 p.set('crm_contact_id', selected.id)
                 return 'https://sos1-proposal-experience.onrender.com/?' + p.toString()
               })()}
@@ -171,7 +209,7 @@ export default function Contacts() {
               rel="noreferrer"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 14, marginBottom: 10, background: C.gold, color: '#fff', borderRadius: 8, padding: '11px 0', textDecoration: 'none', fontSize: 13, fontWeight: 700, fontFamily: F }}
             >
-              ⚡ Add Proposal
+              ⚡ {selected.utility_bill_url ? 'Create Proposal from Utility Bill' : 'Add Proposal'}
             </a>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => openEdit(selected)} style={{ flex: 1, background: C.navy, color: C.cream, border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Edit</button>
@@ -216,6 +254,52 @@ export default function Contacts() {
               <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>Deal Value ($)</label>
               <input type="number" value={form.value || ''} onChange={e => setForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
                 style={{ width: '100%', height: 38, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 12px', fontSize: 14, color: C.navy, background: '#FAFAF8' }} />
+            </div>
+            {/* Utility Info Section */}
+            <div style={{ borderTop: `1px solid ${C.borderLight}`, paddingTop: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>⚡ Utility & Solar Info</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>Utility Provider</label>
+                  <select value={form.utility || ''} onChange={e => setForm(f => ({ ...f, utility: e.target.value }))}
+                    style={{ width: '100%', height: 38, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 12px', fontSize: 13, color: C.navy, background: '#FAFAF8' }}>
+                    <option value="">Select…</option>
+                    {['SCE','LADWP','PG&E','SDG&E','NV Energy','APS','SRP','Other'].map(u => <option key={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>Roof Type</label>
+                  <select value={form.roof_type || ''} onChange={e => setForm(f => ({ ...f, roof_type: e.target.value }))}
+                    style={{ width: '100%', height: 38, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 12px', fontSize: 13, color: C.navy, background: '#FAFAF8' }}>
+                    <option value="">Select…</option>
+                    {['Comp Shingle','Clay/Concrete Tile','Metal','Flat/TPO'].map(r => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                {[['Monthly kWh', 'monthly_kwh', '1200'], ['Avg Bill ($)', 'avg_bill', '480'], ['Rate ($/kWh)', 'current_rate', '0.3949']].map(([label, field, ph]) => (
+                  <div key={field}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>{label}</label>
+                    <input type="number" value={form[field] || ''} placeholder={ph} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                      style={{ width: '100%', height: 38, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 10px', fontSize: 13, color: C.navy, background: '#FAFAF8', boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginBottom: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 8 }}>Upload Utility Bill</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: `1.5px dashed ${billFile ? C.gold : C.border}`, borderRadius: 8, cursor: 'pointer', background: billFile ? C.goldPale : '#FAFAF8' }}>
+                  <Upload size={15} color={billFile ? C.gold : C.textMuted} />
+                  <span style={{ fontSize: 13, color: billFile ? C.gold : C.textMuted, fontWeight: billFile ? 700 : 400 }}>
+                    {uploading ? 'Uploading…' : billFile ? billFile.name : 'PDF, PNG, or JPG — click to upload'}
+                  </span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setBillFile(e.target.files[0])} style={{ display: 'none' }} />
+                </label>
+                {form.utility_bill_url && !billFile && (
+                  <div style={{ fontSize: 11, color: C.textSoft, marginTop: 5 }}>
+                    Bill on file — <a href={form.utility_bill_url} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700 }}>view existing ↗</a>
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ marginBottom: 24 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>Notes</label>
