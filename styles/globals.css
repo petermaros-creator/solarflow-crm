@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+body {
+  font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', Arial, sans-serif;
+  background: #F6F0E4;
+  color: #0B1929;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #DEB87A; border-radius: 10px; }
+input, textarea, select, button {
+  font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', Arial, sans-serif;
+  outline: none;
+}
